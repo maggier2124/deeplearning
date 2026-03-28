@@ -26,8 +26,25 @@ class Classifier(nn.Module):
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
-        # TODO: implement
-        pass
+        self.features = nn.Sequential(
+            nn.Conv2d(in_channels, 16, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),  
+            
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2), 
+            
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2), 
+        )
+        
+        self.classifier = nn.Sequential(
+            nn.Linear(64 * 8 * 8, 128),
+            nn.ReLU(inplace=True),
+            nn.Linear(128, num_classes)
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -37,12 +54,10 @@ class Classifier(nn.Module):
         Returns:
             tensor (b, num_classes) logits
         """
-        # optional: normalizes the input
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
-
-        # TODO: replace with actual forward pass
-        logits = torch.randn(x.size(0), 6)
-
+        features = self.features(z)
+        features = features.view(features.size(0), -1)  # Flatten
+        logits = self.classifier(features)
         return logits
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
@@ -79,7 +94,98 @@ class Detector(torch.nn.Module):
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
         # TODO: implement
-        pass
+        # Shared encoder for feature extraction
+        self.encoder = nn.Sequential(
+            # Down1: (b, 3, 96, 128) -> (b, 32, 48, 64)
+            nn.Conv2d(in_channels, 32, kernel_size=3, padding=1, stride=2),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            
+            # Down2: (b, 32, 48, 64) -> (b, 64, 24, 32)
+            nn.Conv2d(32, 64, kernel_size=3, padding=1, stride=2),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            
+            # Down3: (b, 64, 24, 32) -> (b, 128, 12, 16)
+            nn.Conv2d(64, 128, kernel_size=3, padding=1, stride=2),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            
+            nn.Conv2d(128, 256, kernel_size=3, padding=1, stride=2),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+        )
+        
+        # Segmentation decoder with skip connections
+        self.segmentation_decoder = nn.Sequential(
+            nn.ConvTranspose2d(256, 128, kernel_size=3, padding=1, stride=2, output_padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            
+
+            nn.ConvTranspose2d(128, 64, kernel_size=3, padding=1, stride=2, output_padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            
+            nn.ConvTranspose2d(64, 32, kernel_size=3, padding=1, stride=2, output_padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            
+            nn.ConvTranspose2d(32, 32, kernel_size=3, padding=1, stride=2, output_padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            
+            nn.Conv2d(32, num_classes, kernel_size=1),
+        )
+        
+        # Depth decoder 
+        self.depth_decoder = nn.Sequential(
+            nn.ConvTranspose2d(256, 128, kernel_size=3, padding=1, stride=2, output_padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            
+            nn.ConvTranspose2d(128, 64, kernel_size=3, padding=1, stride=2, output_padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            
+            nn.ConvTranspose2d(64, 32, kernel_size=3, padding=1, stride=2, output_padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            
+            nn.ConvTranspose2d(32, 32, kernel_size=3, padding=1, stride=2, output_padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            
+            nn.Conv2d(32, 1, kernel_size=1),
+            nn.Sigmoid()  # Normalize depth to [0, 1]
+        )
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -94,14 +200,20 @@ class Detector(torch.nn.Module):
                 - logits (b, num_classes, h, w)
                 - depth (b, h, w)
         """
-        # optional: normalizes the input
+        # Normalize input
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
-        # TODO: replace with actual forward pass
-        logits = torch.randn(x.size(0), 3, x.size(2), x.size(3))
-        raw_depth = torch.rand(x.size(0), x.size(2), x.size(3))
+        # Shared encoder
+        features = self.encoder(z)
+        
+        # Separate decoders
+        logits = self.segmentation_decoder(features)
+        raw_depth = self.depth_decoder(features)
+        
+        # Squeeze depth channel to match expected output shape (b, h, w)
+        depth = raw_depth.squeeze(1)
 
-        return logits, raw_depth
+        return logits, depth
 
     def predict(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -191,7 +303,7 @@ def calculate_model_size_mb(model: torch.nn.Module) -> float:
     return sum(p.numel() for p in model.parameters()) * 4 / 1024 / 1024
 
 
-def debug_model(batch_size: int = 1):
+def debug_model(batch_size: int = 4):
     """
     Test your model implementation
 
@@ -204,10 +316,15 @@ def debug_model(batch_size: int = 1):
     print(f"Input shape: {sample_batch.shape}")
 
     model = load_model("classifier", in_channels=3, num_classes=6).to(device)
+    model.eval()  # Set to eval mode to avoid batch norm issues
     output = model(sample_batch)
 
     # should output logits (b, num_classes)
     print(f"Output shape: {output.shape}")
+    
+    # Test size
+    size_mb = calculate_model_size_mb(model)
+    print(f"Model size: {size_mb:.2f} MB")
 
 
 if __name__ == "__main__":
