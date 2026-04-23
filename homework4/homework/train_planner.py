@@ -83,7 +83,15 @@ def train(
 
             # forward pass
             pred = model(track_left, track_right)
-            loss = loss_func(pred * waypoints_mask[..., None], waypoints * waypoints_mask[..., None])
+
+            # weighted SmoothL1 (Huber-like) loss: weight lateral error higher
+            weights = torch.tensor([1.0, 3.0], device=device)  # [longitudinal, lateral]
+            mask = waypoints_mask[..., None].float()
+            diff = (pred - waypoints) * mask
+            absd = diff.abs()
+            delta = 1.0
+            huber = torch.where(absd < delta, 0.5 * diff ** 2, delta * (absd - 0.5 * delta))
+            loss = (huber * weights[None, None, :]).sum() / (mask.sum() + 1e-6)
 
             # backward pass
             optimizer.zero_grad()

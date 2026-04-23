@@ -26,11 +26,13 @@ class MLPPlanner(nn.Module):
 
         self.mlp = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(n_track * 2 * 2, 128),
+            nn.Linear(n_track * 2 * 2, 256),
             nn.ReLU(),
-            nn.Linear(128, 64),
+            nn.LayerNorm(256),
+            nn.Dropout(0.1),
+            nn.Linear(256, 128),
             nn.ReLU(),
-            nn.Linear(64, n_waypoints * 2),
+            nn.Linear(128, n_waypoints * 2),
         )
 
     def forward(
